@@ -69,10 +69,15 @@ export function createBranchSelector(
     select.focus()
   }
   
-  return Object.assign(container, { setBranches, handleKey })
+  const blur = () => {
+    select.blur()
+  }
+  
+  return Object.assign(container, { setBranches, handleKey, blur })
 }
 
 export type BranchSelectorWithSet = BoxRenderable & { 
   setBranches: (branches: Branch[]) => void
   handleKey: (key: { name: string }) => void
+  blur: () => void
 }

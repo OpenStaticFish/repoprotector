@@ -3,7 +3,7 @@ import type { Organization, Repository, Branch, BranchProtection, BranchProtecti
 import { theme } from './theme'
 import { getOrganizations, getOrgRepos, getRepoBranches, getBranchProtection, applyProtectionToMultiple, detectLocalRepo } from './api/github'
 import { initializeDefaultTemplates, saveTemplate } from './utils/templates'
-import { createOrgSelector, updateOrgOptions, type OrgSelectorResult } from './components/OrgSelector'
+import { createOrgSelector, updateOrgOptions, blurSelect, type OrgSelectorResult } from './components/OrgSelector'
 import { createRepoSelector, type RepoSelectorWithSet } from './components/RepoSelector'
 import { createBranchSelector, type BranchSelectorWithSet } from './components/BranchSelector'
 import { createProtectionEditor, type ProtectionEditorWithMethods } from './components/ProtectionEditor'
@@ -115,6 +115,9 @@ export async function runApp(localMode: boolean = false): Promise<void> {
   
   const clearScreen = () => {
     if (currentScreenComponent) {
+      if ('blur' in currentScreenComponent && typeof currentScreenComponent.blur === 'function') {
+        (currentScreenComponent as { blur: () => void }).blur()
+      }
       mainContent.remove(currentScreenComponent.id)
       currentScreenComponent = null
     }
@@ -127,7 +130,11 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     updateBreadcrumb()
     updateFooter('Select an organization to manage')
     
-    const result = createOrgSelector(renderer, (org) => { state.org = org; showRepoSelector() })
+    const result = createOrgSelector(renderer, (org) => { 
+      blurSelect(result.select)
+      state.org = org 
+      showRepoSelector() 
+    })
     mainContent.add(result.container)
     currentScreenComponent = result.container
     
@@ -151,8 +158,15 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     
     const container = createRepoSelector(
       renderer,
-      (repos) => { state.selectedRepos = repos; showBranchSelector() },
-      () => showOrgSelector()
+      (repos) => { 
+        container.blur()
+        state.selectedRepos = repos; 
+        showBranchSelector() 
+      },
+      () => { 
+        container.blur()
+        showOrgSelector() 
+      }
     ) as RepoSelectorWithSet
     
     mainContent.add(container)
@@ -185,6 +199,7 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     const container = createBranchSelector(
       renderer,
       async (branch) => {
+        container.blur()
         state.branch = branch
         showLoading('Fetching current protection...')
         try {
@@ -196,7 +211,10 @@ export async function runApp(localMode: boolean = false): Promise<void> {
           showError(err instanceof Error ? err.message : 'Failed to load protection')
         }
       },
-      () => showRepoSelector()
+      () => { 
+        container.blur()
+        showRepoSelector() 
+      }
     ) as BranchSelectorWithSet
     
     mainContent.add(container)
@@ -264,6 +282,7 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     const container = createTemplateManager(
       renderer,
       (protection) => {
+        container.blur()
         state.proposedProtection = protection
         showEditor()
         setTimeout(() => {
@@ -276,7 +295,10 @@ export async function runApp(localMode: boolean = false): Promise<void> {
           }
         }, 50)
       },
-      () => { state.org ? showRepoSelector() : showOrgSelector() }
+      () => { 
+        container.blur()
+        state.org ? showRepoSelector() : showOrgSelector() 
+      }
     ) as TemplateManagerWithRefresh
     
     mainContent.add(container)

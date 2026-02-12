@@ -94,10 +94,15 @@ export function createTemplateManager(
     select.focus()
   }
   
-  return Object.assign(container, { refresh, handleKey })
+  const blur = () => {
+    select.blur()
+  }
+  
+  return Object.assign(container, { refresh, handleKey, blur })
 }
 
 export type TemplateManagerWithRefresh = BoxRenderable & { 
   refresh: () => Promise<void>
   handleKey: (key: { name: string }) => Promise<void>
+  blur: () => void
 }

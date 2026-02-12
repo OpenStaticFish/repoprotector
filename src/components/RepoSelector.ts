@@ -102,7 +102,11 @@ export function createRepoSelector(
     select.focus()
   }
   
-  return Object.assign(container, { setRepos, handleKey })
+  const blur = () => {
+    select.blur()
+  }
+  
+  return Object.assign(container, { setRepos, handleKey, blur })
 }
 
 function updateSelectOptions(select: SelectRenderable, items: RepoItem[]): void {
@@ -116,4 +120,5 @@ function updateSelectOptions(select: SelectRenderable, items: RepoItem[]): void 
 export type RepoSelectorWithSet = BoxRenderable & { 
   setRepos: (repos: Repository[]) => void
   handleKey: (key: { name: string }) => void
+  blur: () => void
 }

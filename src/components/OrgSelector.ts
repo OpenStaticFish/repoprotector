@@ -75,3 +75,7 @@ export function updateOrgOptions(select: SelectRenderable, orgs: Organization[])
   }))
   select.focus()
 }
+
+export function blurSelect(select: SelectRenderable): void {
+  select.blur()
+}
