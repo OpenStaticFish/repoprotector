@@ -3,8 +3,6 @@ import {
   TextRenderable,
   InputRenderable,
   InputRenderableEvents,
-  SelectRenderable,
-  SelectRenderableEvents,
   type CliRenderer,
   type Renderable,
 } from '@opentui/core'
@@ -18,6 +16,11 @@ interface EditorField {
   type: 'boolean' | 'number' | 'string' | 'workflow-select'
   value: boolean | number | string | string[]
   parent?: string
+}
+
+interface WorkflowItem {
+  workflow: Workflow
+  selected: boolean
 }
 
 export type ProtectionSaveCallback = (protection: BranchProtectionInput) => void
@@ -72,8 +75,10 @@ export function createProtectionEditor(
     rowIds: string[]
     workflows: Workflow[]
     repoInfo: { owner: string; repo: string } | null
-    showWorkflowSelect: boolean
-    workflowSelect: SelectRenderable | null
+    showWorkflowModal: boolean
+    workflowItems: WorkflowItem[]
+    workflowFocusIndex: number
+    modalRowIds: string[]
   } = {
     protection: createDefaultProtection(),
     fields: [],
@@ -82,8 +87,10 @@ export function createProtectionEditor(
     rowIds: [],
     workflows: [],
     repoInfo: null,
-    showWorkflowSelect: false,
-    workflowSelect: null,
+    showWorkflowModal: false,
+    workflowItems: [],
+    workflowFocusIndex: 0,
+    modalRowIds: [],
   }
   
   const buildFields = (): EditorField[] => {
@@ -118,7 +125,7 @@ export function createProtectionEditor(
       )
       if (state.workflows.length > 0) {
         fields.push(
-          { key: 'add_workflow', label: '  [+] Add workflow check', type: 'workflow-select', value: '', parent: 'required_status_checks' },
+          { key: 'add_workflow', label: '  [+] Add workflow checks', type: 'workflow-select', value: '', parent: 'required_status_checks' },
         )
       }
     } else {
@@ -339,69 +346,173 @@ export function createProtectionEditor(
     }
   }
   
-  const addWorkflowCheck = (workflowName: string) => {
+  const addWorkflowChecks = (workflowNames: string[]) => {
     const p = state.protection
     if (!p.required_status_checks) {
       p.required_status_checks = { strict: false, contexts: [] }
     }
     
-    const checkName = workflowName
-    if (!p.required_status_checks.contexts.includes(checkName)) {
-      p.required_status_checks.contexts.push(checkName)
+    for (const name of workflowNames) {
+      if (!p.required_status_checks.contexts.includes(name)) {
+        p.required_status_checks.contexts.push(name)
+      }
     }
     
     renderFields()
   }
   
-  const showWorkflowSelector = () => {
-    if (state.workflows.length === 0) return
+  const clearModalRows = () => {
+    for (const rowId of state.modalRowIds) {
+      container.remove(rowId)
+    }
+    state.modalRowIds = []
+  }
+  
+  const renderWorkflowModal = () => {
+    clearModalRows()
     
-    clearRows()
-    state.showWorkflowSelect = true
+    const modalOverlay = new BoxRenderable(renderer, {
+      id: 'workflow-modal-overlay',
+      position: 'absolute',
+      top: 3,
+      left: 2,
+      right: 2,
+      bottom: 2,
+      backgroundColor: theme.bg,
+      borderStyle: 'rounded',
+      borderColor: theme.accent,
+      flexDirection: 'column',
+      padding: 1,
+    })
     
-    const titleText = new TextRenderable(renderer, {
-      id: 'workflow-title',
-      content: 'Select Workflow to Add as Status Check',
+    const modalTitle = new TextRenderable(renderer, {
+      id: 'modal-title',
+      content: 'Select Workflows to Add as Status Checks',
       fg: theme.accent,
     })
-    scrollContent.add(titleText)
-    state.rowIds.push('workflow-title')
+    modalOverlay.add(modalTitle)
     
-    const select = new SelectRenderable(renderer, {
-      id: 'workflow-select',
+    const modalHelp = new TextRenderable(renderer, {
+      id: 'modal-help',
+      content: 'Space Toggle  |  Enter Apply  |  Esc Cancel',
+      fg: theme.textMuted,
+    })
+    
+    const listContainer = new BoxRenderable(renderer, {
+      id: 'workflow-list',
       width: '100%',
       flexGrow: 1,
-      backgroundColor: theme.bg,
-      selectedBackgroundColor: theme.selectedBg,
-      selectedTextColor: theme.accent,
-      textColor: theme.text,
-      descriptionColor: theme.textMuted,
-      focusedBackgroundColor: theme.panelBg,
-      showDescription: true,
+      flexDirection: 'column',
+      backgroundColor: theme.panelBg,
+      padding: 1,
     })
     
-    select.options = state.workflows.map((w) => ({
-      name: w.name,
-      description: w.path,
-      value: w.name,
-    }))
+    for (let i = 0; i < state.workflowItems.length; i++) {
+      const item = state.workflowItems[i]!
+      const isFocused = i === state.workflowFocusIndex
+      const rowId = `workflow-row-${i}`
+      
+      const row = new BoxRenderable(renderer, {
+        id: rowId,
+        width: '100%',
+        flexDirection: 'row',
+        backgroundColor: isFocused ? theme.selectedBg : 'transparent',
+        padding: 0,
+      })
+      
+      const checkbox = new TextRenderable(renderer, {
+        id: `checkbox-${i}`,
+        content: item.selected ? '✓ ' : '○ ',
+        fg: item.selected ? theme.success : theme.textDim,
+      })
+      
+      const name = new TextRenderable(renderer, {
+        id: `name-${i}`,
+        content: item.workflow.name,
+        fg: isFocused ? theme.accent : theme.text,
+      })
+      
+      const path = new TextRenderable(renderer, {
+        id: `path-${i}`,
+        content: `  ${item.workflow.path}`,
+        fg: theme.textMuted,
+      })
+      
+      row.add(checkbox)
+      row.add(name)
+      row.add(path)
+      listContainer.add(row)
+    }
     
-    select.on(SelectRenderableEvents.ITEM_SELECTED, (_index, option) => {
-      if (option?.value) {
-        addWorkflowCheck(option.value as string)
-      }
+    const countText = new TextRenderable(renderer, {
+      id: 'selected-count',
+      content: `${state.workflowItems.filter(w => w.selected).length} selected`,
+      fg: theme.accentPurple,
     })
     
-    scrollContent.add(select)
-    state.rowIds.push('workflow-select')
-    state.workflowSelect = select
-    select.focus()
+    modalOverlay.add(listContainer)
+    modalOverlay.add(countText)
+    modalOverlay.add(modalHelp)
+    
+    container.add(modalOverlay)
+    state.modalRowIds.push('workflow-modal-overlay')
+  }
+  
+  const showWorkflowModal = () => {
+    if (state.workflows.length === 0) return
+    
+    state.workflowItems = state.workflows.map((w) => {
+      const alreadyAdded = state.protection.required_status_checks?.contexts?.includes(w.name) ?? false
+      return { workflow: w, selected: alreadyAdded }
+    })
+    state.workflowFocusIndex = 0
+    state.showWorkflowModal = true
+    
+    renderWorkflowModal()
+  }
+  
+  const hideWorkflowModal = () => {
+    state.showWorkflowModal = false
+    clearModalRows()
   }
   
   const handleKey = (key: { name: string; shift: boolean; ctrl: boolean }) => {
-    if (state.showWorkflowSelect && key.name === 'escape') {
-      state.showWorkflowSelect = false
-      renderFields()
+    if (state.showWorkflowModal) {
+      if (key.name === 'escape') {
+        hideWorkflowModal()
+        return
+      }
+      
+      if (key.name === 'up' || key.name === 'k') {
+        state.workflowFocusIndex = (state.workflowFocusIndex - 1 + state.workflowItems.length) % state.workflowItems.length
+        renderWorkflowModal()
+        return
+      }
+      
+      if (key.name === 'down' || key.name === 'j') {
+        state.workflowFocusIndex = (state.workflowFocusIndex + 1) % state.workflowItems.length
+        renderWorkflowModal()
+        return
+      }
+      
+      if (key.name === 'space') {
+        const item = state.workflowItems[state.workflowFocusIndex]
+        if (item) {
+          item.selected = !item.selected
+          renderWorkflowModal()
+        }
+        return
+      }
+      
+      if (key.name === 'return' || key.name === 'enter') {
+        const selected = state.workflowItems.filter(w => w.selected).map(w => w.workflow.name)
+        if (selected.length > 0) {
+          addWorkflowChecks(selected)
+        }
+        hideWorkflowModal()
+        return
+      }
+      
       return
     }
     
@@ -429,7 +540,7 @@ export function createProtectionEditor(
         updateProtectionFromField(field)
         renderFields()
       } else if (field.type === 'workflow-select') {
-        showWorkflowSelector()
+        showWorkflowModal()
       }
     } else if (key.name === 'escape') {
       onCancel()
