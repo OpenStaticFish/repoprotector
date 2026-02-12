@@ -190,7 +190,7 @@ export async function runApp(localMode: boolean = false): Promise<void> {
         try {
           state.currentProtection = await getBranchProtection(repo.owner.login, repo.name, branch)
           hideLoading()
-          showEditor()
+          await showEditor()
         } catch (err) {
           hideLoading()
           showError(err instanceof Error ? err.message : 'Failed to load protection')
@@ -217,11 +217,11 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     }
   }
   
-  const showEditor = () => {
+  const showEditor = async () => {
     clearScreen()
     state.screen = 'editor'
     updateBreadcrumb()
-    updateFooter('Configure protection settings')
+    showLoading('Loading editor...')
     
     const repo = state.selectedRepos[0]!
     const container = createProtectionEditor(
@@ -231,10 +231,15 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     ) as ProtectionEditorWithMethods
     
     container.setProtection(state.currentProtection)
-    container.setRepoInfo(repo.owner.login, repo.name)
     
     mainContent.add(container)
     currentScreenComponent = container
+    
+    await container.setRepoInfo(repo.owner.login, repo.name)
+    
+    hideLoading()
+    updateFooter('Configure protection settings')
+    
     currentKeyHandler = (key) => {
       if (key.ctrl && key.name === 's' && state.proposedProtection) {
         const name = `template-${Date.now()}`
@@ -322,6 +327,7 @@ export async function runApp(localMode: boolean = false): Promise<void> {
   }
   
   renderer.keyInput.on('keypress', (key: { name: string; shift: boolean; ctrl: boolean }) => {
+    if (state.isLoading) return
     if (currentKeyHandler) {
       currentKeyHandler(key)
     }
