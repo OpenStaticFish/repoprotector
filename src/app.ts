@@ -30,7 +30,7 @@ interface KeyHandler {
 export async function runApp(localMode: boolean = false): Promise<void> {
   await initializeDefaultTemplates()
   
-  const renderer = await createCliRenderer({ exitOnCtrlC: true })
+  const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: false })
   
   const state: {
     screen: Screen

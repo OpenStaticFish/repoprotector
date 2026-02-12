@@ -73,15 +73,41 @@ export async function getRepoBranches(owner: string, repo: string): Promise<Bran
   return (await ghApi(`/repos/${owner}/${repo}/branches?per_page=100`)) as Branch[]
 }
 
+function extractEnabled<T>(value: T | { enabled: boolean } | null | undefined): T | boolean | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'object' && value !== null && 'enabled' in value) {
+    return (value as { enabled: boolean }).enabled
+  }
+  return value as T
+}
+
+function transformProtectionResponse(raw: Record<string, unknown>): BranchProtection {
+  return {
+    url: raw.url as string | undefined,
+    required_pull_request_reviews: raw.required_pull_request_reviews as BranchProtection['required_pull_request_reviews'],
+    required_status_checks: raw.required_status_checks as BranchProtection['required_status_checks'],
+    enforce_admins: extractEnabled(raw.enforce_admins) as boolean,
+    required_linear_history: extractEnabled(raw.required_linear_history) as boolean,
+    allow_force_pushes: extractEnabled(raw.allow_force_pushes) as boolean,
+    allow_deletions: extractEnabled(raw.allow_deletions) as boolean,
+    block_creations: extractEnabled(raw.block_creations) as boolean,
+    required_conversation_resolution: extractEnabled(raw.required_conversation_resolution) as boolean,
+    restrictions: raw.restrictions as BranchProtection['restrictions'],
+    required_signatures: raw.required_signatures ? { enabled: extractEnabled(raw.required_signatures) as boolean } : null,
+    lock_branch: extractEnabled(raw.lock_branch) as boolean | undefined,
+  }
+}
+
 export async function getBranchProtection(
   owner: string,
   repo: string,
   branch: string
 ): Promise<BranchProtection | null> {
   try {
-    return (await ghApi(
+    const raw = await ghApi(
       `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`
-    )) as BranchProtection
+    )
+    return transformProtectionResponse(raw as Record<string, unknown>)
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
     if (msg.includes('404') || msg.includes('Not Found')) {
@@ -97,10 +123,22 @@ export async function updateBranchProtection(
   branch: string,
   protection: BranchProtectionInput
 ): Promise<BranchProtection> {
+  const cleanInput: Record<string, unknown> = {
+    required_pull_request_reviews: protection.required_pull_request_reviews ?? null,
+    required_status_checks: protection.required_status_checks ?? null,
+    enforce_admins: protection.enforce_admins ?? false,
+    required_linear_history: protection.required_linear_history ?? false,
+    allow_force_pushes: protection.allow_force_pushes ?? false,
+    allow_deletions: protection.allow_deletions ?? false,
+    block_creations: protection.block_creations ?? false,
+    required_conversation_resolution: protection.required_conversation_resolution ?? true,
+    restrictions: protection.restrictions ?? null,
+  }
+  
   return (await ghApi(
     `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
     'PUT',
-    protection
+    cleanInput
   )) as BranchProtection
 }
 
