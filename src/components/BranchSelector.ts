@@ -1,10 +1,4 @@
-import {
-  BoxRenderable,
-  TextRenderable,
-  SelectRenderable,
-  SelectRenderableEvents,
-  type CliRenderer,
-} from '@opentui/core'
+import { BoxRenderable, TextRenderable, SelectRenderable, SelectRenderableEvents, type CliRenderer } from '@opentui/core'
 import type { Branch } from '../types'
 import { theme } from '../theme'
 
@@ -56,11 +50,11 @@ export function createBranchSelector(
     }
   })
   
-  renderer.keyInput.on('keypress', (key: { name: string }) => {
+  const handleKey = (key: { name: string }) => {
     if (key.name === 'escape') {
       onBack()
     }
-  })
+  }
   
   container.add(title)
   container.add(select)
@@ -76,7 +70,10 @@ export function createBranchSelector(
     }))
   }
   
-  return Object.assign(container, { setBranches })
+  return Object.assign(container, { setBranches, handleKey })
 }
 
-export type BranchSelectorWithSet = BoxRenderable & { setBranches: (branches: Branch[]) => void }
+export type BranchSelectorWithSet = BoxRenderable & { 
+  setBranches: (branches: Branch[]) => void
+  handleKey: (key: { name: string }) => void
+}

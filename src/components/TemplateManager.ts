@@ -1,15 +1,7 @@
-import {
-  BoxRenderable,
-  TextRenderable,
-  SelectRenderable,
-  SelectRenderableEvents,
-  InputRenderable,
-  InputRenderableEvents,
-  type CliRenderer,
-} from '@opentui/core'
+import { BoxRenderable, TextRenderable, SelectRenderable, SelectRenderableEvents, type CliRenderer } from '@opentui/core'
 import type { Template, BranchProtectionInput } from '../types'
 import { theme } from '../theme'
-import { listTemplates, saveTemplate, deleteTemplate } from '../utils/templates'
+import { listTemplates, deleteTemplate } from '../utils/templates'
 
 export type TemplateSelectCallback = (protection: BranchProtectionInput) => void
 export type TemplateCancelCallback = () => void
@@ -57,7 +49,7 @@ export function createTemplateManager(
   
   const helpText = new TextRenderable(renderer, {
     id: 'template-help',
-    content: 'Enter Load  |  d Delete  |  Ctrl+S Save Current  |  Esc Back',
+    content: 'Enter Load  |  d Delete  |  Esc Back',
     fg: theme.textMuted,
   })
   
@@ -79,7 +71,7 @@ export function createTemplateManager(
     }
   })
   
-  renderer.keyInput.on('keypress', async (key: { name: string; ctrl: boolean }) => {
+  const handleKey = async (key: { name: string }) => {
     if (key.name === 'escape') {
       onCancel()
     } else if (key.name === 'd') {
@@ -89,10 +81,8 @@ export function createTemplateManager(
         await deleteTemplate(template.name)
         await loadTemplates()
       }
-    } else if (key.ctrl && key.name === 's') {
-      // This will be handled by the parent app
     }
-  })
+  }
   
   footer.add(helpText)
   container.add(title)
@@ -104,7 +94,10 @@ export function createTemplateManager(
   
   const refresh = () => loadTemplates()
   
-  return Object.assign(container, { refresh })
+  return Object.assign(container, { refresh, handleKey })
 }
 
-export type TemplateManagerWithRefresh = BoxRenderable & { refresh: () => Promise<void> }
+export type TemplateManagerWithRefresh = BoxRenderable & { 
+  refresh: () => Promise<void>
+  handleKey: (key: { name: string }) => Promise<void>
+}

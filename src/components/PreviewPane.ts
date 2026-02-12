@@ -1,8 +1,4 @@
-import {
-  BoxRenderable,
-  TextRenderable,
-  type CliRenderer,
-} from '@opentui/core'
+import { BoxRenderable, TextRenderable, type CliRenderer } from '@opentui/core'
 import type { BranchProtection, BranchProtectionInput, ApplyResult } from '../types'
 import { theme } from '../theme'
 
@@ -193,7 +189,7 @@ export function createPreviewPane(
     contentBox.add(text)
   }
   
-  renderer.keyInput.on('keypress', (key: { name: string }) => {
+  const handleKey = (key: { name: string }) => {
     if (key.name === 'return' || key.name === 'enter') {
       if (state.mode === 'diff') {
         onConfirm()
@@ -203,7 +199,7 @@ export function createPreviewPane(
     } else if (key.name === 'escape') {
       onCancel()
     }
-  })
+  }
   
   footer.add(helpText)
   container.add(title)
@@ -223,10 +219,11 @@ export function createPreviewPane(
     renderResults()
   }
   
-  return Object.assign(container, { setDiff, setResults })
+  return Object.assign(container, { setDiff, setResults, handleKey })
 }
 
 export type PreviewPaneWithMethods = BoxRenderable & {
   setDiff: (current: BranchProtection | null, proposed: BranchProtectionInput) => void
   setResults: (results: ApplyResult[]) => void
+  handleKey: (key: { name: string }) => void
 }

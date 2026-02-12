@@ -1,27 +1,7 @@
-import {
-  createCliRenderer,
-  BoxRenderable,
-  TextRenderable,
-  SelectRenderable,
-  type CliRenderer,
-} from '@opentui/core'
-import type { 
-  Organization, 
-  Repository, 
-  Branch, 
-  BranchProtection, 
-  BranchProtectionInput,
-  ApplyResult 
-} from './types'
+import { createCliRenderer, BoxRenderable, TextRenderable, SelectRenderable, type CliRenderer } from '@opentui/core'
+import type { Organization, Repository, Branch, BranchProtection, BranchProtectionInput, ApplyResult } from './types'
 import { theme } from './theme'
-import { 
-  getOrganizations, 
-  getOrgRepos, 
-  getRepoBranches, 
-  getBranchProtection,
-  applyProtectionToMultiple,
-  detectLocalRepo,
-} from './api/github'
+import { getOrganizations, getOrgRepos, getRepoBranches, getBranchProtection, applyProtectionToMultiple, detectLocalRepo } from './api/github'
 import { initializeDefaultTemplates, saveTemplate } from './utils/templates'
 import { createOrgSelector, updateOrgOptions, type OrgSelectorResult } from './components/OrgSelector'
 import { createRepoSelector, type RepoSelectorWithSet } from './components/RepoSelector'
@@ -32,12 +12,14 @@ import { createPreviewPane, type PreviewPaneWithMethods } from './components/Pre
 
 type Screen = 'orgs' | 'repos' | 'branches' | 'editor' | 'templates' | 'preview'
 
+interface KeyHandler {
+  (key: { name: string; shift: boolean; ctrl: boolean }): void | Promise<void>
+}
+
 export async function runApp(localMode: boolean = false): Promise<void> {
   await initializeDefaultTemplates()
   
-  const renderer = await createCliRenderer({
-    exitOnCtrlC: true,
-  })
+  const renderer = await createCliRenderer({ exitOnCtrlC: true })
   
   const state: {
     screen: Screen
@@ -82,17 +64,8 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     padding: 1,
   })
   
-  const headerTitle = new TextRenderable(renderer, {
-    id: 'header-title',
-    content: 'RepoProtector',
-    fg: theme.accent,
-  })
-  
-  const headerBreadcrumb = new TextRenderable(renderer, {
-    id: 'header-breadcrumb',
-    content: '',
-    fg: theme.textMuted,
-  })
+  const headerTitle = new TextRenderable(renderer, { id: 'header-title', content: 'RepoProtector', fg: theme.accent })
+  const headerBreadcrumb = new TextRenderable(renderer, { id: 'header-breadcrumb', content: '', fg: theme.textMuted })
   
   const mainContent = new BoxRenderable(renderer, {
     id: 'main-content',
@@ -112,61 +85,40 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     padding: 0,
   })
   
-  const footerText = new TextRenderable(renderer, {
-    id: 'footer-text',
-    content: '',
-    fg: theme.textMuted,
-  })
+  const footerText = new TextRenderable(renderer, { id: 'footer-text', content: '', fg: theme.textMuted })
   
   header.add(headerTitle)
   header.add(headerBreadcrumb)
   footer.add(footerText)
-  
   root.add(header)
   root.add(mainContent)
   root.add(footer)
-  
   renderer.root.add(root)
   
   let currentScreenComponent: BoxRenderable | null = null
+  let currentKeyHandler: KeyHandler | null = null
   
   const updateBreadcrumb = () => {
     const parts: string[] = []
     if (state.org) parts.push(state.org.login)
     if (state.selectedRepos.length > 0) {
-      parts.push(state.selectedRepos.length === 1 
-        ? state.selectedRepos[0]!.name 
-        : `${state.selectedRepos.length} repos`)
+      parts.push(state.selectedRepos.length === 1 ? state.selectedRepos[0]!.name : `${state.selectedRepos.length} repos`)
     }
     if (state.branch) parts.push(state.branch)
-    
     headerBreadcrumb.content = parts.join(' > ')
   }
   
-  const updateFooter = (text: string) => {
-    footerText.content = text
-  }
-  
-  const showLoading = (message: string) => {
-    state.isLoading = true
-    updateFooter(`Loading... ${message}`)
-  }
-  
-  const hideLoading = () => {
-    state.isLoading = false
-    updateFooter('')
-  }
-  
-  const showError = (message: string) => {
-    state.error = message
-    updateFooter(`Error: ${message}`)
-  }
+  const updateFooter = (text: string) => { footerText.content = text }
+  const showLoading = (message: string) => { state.isLoading = true; updateFooter(`Loading... ${message}`) }
+  const hideLoading = () => { state.isLoading = false; updateFooter('') }
+  const showError = (message: string) => { state.error = message; updateFooter(`Error: ${message}`) }
   
   const clearScreen = () => {
     if (currentScreenComponent) {
       mainContent.remove(currentScreenComponent.id)
       currentScreenComponent = null
     }
+    currentKeyHandler = null
   }
   
   const showOrgSelector = async () => {
@@ -175,11 +127,7 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     updateBreadcrumb()
     updateFooter('Select an organization to manage')
     
-    const result = createOrgSelector(renderer, (org) => {
-      state.org = org
-      showRepoSelector()
-    })
-    
+    const result = createOrgSelector(renderer, (org) => { state.org = org; showRepoSelector() })
     mainContent.add(result.container)
     currentScreenComponent = result.container
     
@@ -196,7 +144,6 @@ export async function runApp(localMode: boolean = false): Promise<void> {
   
   const showRepoSelector = async () => {
     if (!state.org) return
-    
     clearScreen()
     state.screen = 'repos'
     updateBreadcrumb()
@@ -204,15 +151,16 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     
     const container = createRepoSelector(
       renderer,
-      (repos) => {
-        state.selectedRepos = repos
-        showBranchSelector()
-      },
+      (repos) => { state.selectedRepos = repos; showBranchSelector() },
       () => showOrgSelector()
     ) as RepoSelectorWithSet
     
     mainContent.add(container)
     currentScreenComponent = container
+    currentKeyHandler = (key) => {
+      container.handleKey(key)
+      
+    }
     
     showLoading('Fetching repositories...')
     try {
@@ -228,25 +176,19 @@ export async function runApp(localMode: boolean = false): Promise<void> {
   
   const showBranchSelector = async () => {
     if (state.selectedRepos.length === 0) return
-    
     clearScreen()
     state.screen = 'branches'
     updateBreadcrumb()
     updateFooter('Select a branch to protect')
     
     const repo = state.selectedRepos[0]!
-    
     const container = createBranchSelector(
       renderer,
       async (branch) => {
         state.branch = branch
         showLoading('Fetching current protection...')
         try {
-          state.currentProtection = await getBranchProtection(
-            repo.owner.login,
-            repo.name,
-            branch
-          )
+          state.currentProtection = await getBranchProtection(repo.owner.login, repo.name, branch)
           hideLoading()
           showEditor()
         } catch (err) {
@@ -259,6 +201,10 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     
     mainContent.add(container)
     currentScreenComponent = container
+    currentKeyHandler = (key) => {
+      container.handleKey(key)
+      
+    }
     
     showLoading('Fetching branches...')
     try {
@@ -280,10 +226,7 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     const repo = state.selectedRepos[0]!
     const container = createProtectionEditor(
       renderer,
-      (protection) => {
-        state.proposedProtection = protection
-        showPreview()
-      },
+      (protection) => { state.proposedProtection = protection; showPreview() },
       () => showBranchSelector()
     ) as ProtectionEditorWithMethods
     
@@ -292,6 +235,19 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     
     mainContent.add(container)
     currentScreenComponent = container
+    currentKeyHandler = (key) => {
+      if (key.ctrl && key.name === 's' && state.proposedProtection) {
+        const name = `template-${Date.now()}`
+        saveTemplate(name, state.proposedProtection, 'Saved from editor')
+        updateFooter(`Saved as template: ${name}`)
+        
+      } else if (key.ctrl && key.name === 't') {
+        showTemplates()
+        
+      }
+      container.handleKey(key)
+      
+    }
   }
   
   const showTemplates = () => {
@@ -305,7 +261,6 @@ export async function runApp(localMode: boolean = false): Promise<void> {
       (protection) => {
         state.proposedProtection = protection
         showEditor()
-        
         setTimeout(() => {
           if (currentScreenComponent && 'setProtection' in currentScreenComponent && 'setRepoInfo' in currentScreenComponent) {
             const editor = currentScreenComponent as ProtectionEditorWithMethods
@@ -316,22 +271,19 @@ export async function runApp(localMode: boolean = false): Promise<void> {
           }
         }, 50)
       },
-      () => {
-        if (state.org) {
-          showRepoSelector()
-        } else {
-          showOrgSelector()
-        }
-      }
+      () => { state.org ? showRepoSelector() : showOrgSelector() }
     ) as TemplateManagerWithRefresh
     
     mainContent.add(container)
     currentScreenComponent = container
+    currentKeyHandler = async (key) => {
+      await container.handleKey(key)
+      
+    }
   }
   
   const showPreview = () => {
     if (!state.proposedProtection) return
-    
     clearScreen()
     state.screen = 'preview'
     updateBreadcrumb()
@@ -341,20 +293,16 @@ export async function runApp(localMode: boolean = false): Promise<void> {
       renderer,
       async () => {
         if (!state.proposedProtection) return
-        
         showLoading('Applying protection...')
-        
         const targets = state.selectedRepos.map((repo) => ({
           owner: repo.owner.login,
           repo: repo.name,
           branch: state.branch!,
         }))
-        
         try {
           const results = await applyProtectionToMultiple(targets, state.proposedProtection)
           state.results = results
           hideLoading()
-          
           container.setResults(results)
         } catch (err) {
           hideLoading()
@@ -365,37 +313,26 @@ export async function runApp(localMode: boolean = false): Promise<void> {
     ) as PreviewPaneWithMethods
     
     container.setDiff(state.currentProtection, state.proposedProtection)
-    
     mainContent.add(container)
     currentScreenComponent = container
+    currentKeyHandler = (key) => {
+      container.handleKey(key)
+      
+    }
   }
   
-  renderer.keyInput.on('keypress', async (key: { name: string; ctrl: boolean }) => {
-    if (key.ctrl && key.name === 's' && state.screen === 'editor') {
-      // Save current protection as template
-      if (state.proposedProtection) {
-        const name = `template-${Date.now()}`
-        await saveTemplate(name, state.proposedProtection, 'Saved from editor')
-        updateFooter(`Saved as template: ${name}`)
-      }
-    } else if (key.ctrl && key.name === 't') {
-      showTemplates()
+  renderer.keyInput.on('keypress', (key: { name: string; shift: boolean; ctrl: boolean }) => {
+    if (currentKeyHandler) {
+      currentKeyHandler(key)
     }
   })
   
-  // Handle --local flag
   if (localMode) {
     showLoading('Detecting local repository...')
     const localRepo = await detectLocalRepo()
-    
     if (localRepo) {
       state.org = { login: localRepo.owner } as Organization
-      state.selectedRepos = [{ 
-        name: localRepo.repo, 
-        full_name: `${localRepo.owner}/${localRepo.repo}`,
-        owner: { login: localRepo.owner },
-      } as Repository]
-      
+      state.selectedRepos = [{ name: localRepo.repo, full_name: `${localRepo.owner}/${localRepo.repo}`, owner: { login: localRepo.owner } } as Repository]
       hideLoading()
       showBranchSelector()
     } else {

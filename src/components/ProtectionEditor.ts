@@ -476,7 +476,11 @@ export function createProtectionEditor(
     clearModalRows()
   }
   
+  let keyHandlerActive = true
+  
   const handleKey = (key: { name: string; shift: boolean; ctrl: boolean }) => {
+    if (!keyHandlerActive) return
+    
     if (state.showWorkflowModal) {
       if (key.name === 'escape') {
         hideWorkflowModal()
@@ -505,11 +509,11 @@ export function createProtectionEditor(
       }
       
       if (key.name === 'return' || key.name === 'enter') {
+        hideWorkflowModal()
         const selected = state.workflowItems.filter(w => w.selected).map(w => w.workflow.name)
         if (selected.length > 0) {
           addWorkflowChecks(selected)
         }
-        hideWorkflowModal()
         return
       }
       
@@ -553,8 +557,6 @@ export function createProtectionEditor(
     }
   }
   
-  renderer.keyInput.on('keypress', handleKey)
-  
   footer.add(helpText)
   container.add(title)
   container.add(scrollContent)
@@ -576,7 +578,7 @@ export function createProtectionEditor(
   
   renderFields()
   
-  return Object.assign(container, { setProtection, getProtection, setRepoInfo })
+  return Object.assign(container, { setProtection, getProtection, setRepoInfo, handleKey })
 }
 
 function createDefaultProtection(): BranchProtectionInput {
@@ -601,4 +603,5 @@ export type ProtectionEditorWithMethods = BoxRenderable & {
   setProtection: (protection: BranchProtectionInput | null) => void
   getProtection: () => BranchProtectionInput
   setRepoInfo: (owner: string, repo: string) => Promise<void>
+  handleKey: (key: { name: string; shift: boolean; ctrl: boolean }) => void
 }

@@ -1,10 +1,4 @@
-import {
-  BoxRenderable,
-  TextRenderable,
-  SelectRenderable,
-  SelectRenderableEvents,
-  type CliRenderer,
-} from '@opentui/core'
+import { BoxRenderable, TextRenderable, SelectRenderable, SelectRenderableEvents, type CliRenderer } from '@opentui/core'
 import type { Repository } from '../types'
 import { theme } from '../theme'
 
@@ -82,7 +76,7 @@ export function createRepoSelector(
     }
   })
   
-  renderer.keyInput.on('keypress', (key: { name: string }) => {
+  const handleKey = (key: { name: string }) => {
     if (key.name === 'space') {
       const idx = select.getSelectedIndex()
       if (idx >= 0 && idx < state.repos.length) {
@@ -93,7 +87,7 @@ export function createRepoSelector(
     } else if (key.name === 'escape') {
       onBack()
     }
-  })
+  }
   
   headerContainer.add(title)
   headerContainer.add(countText)
@@ -109,7 +103,7 @@ export function createRepoSelector(
     updateCount()
   }
   
-  return Object.assign(container, { setRepos })
+  return Object.assign(container, { setRepos, handleKey })
 }
 
 function updateSelectOptions(select: SelectRenderable, items: RepoItem[]): void {
@@ -120,4 +114,7 @@ function updateSelectOptions(select: SelectRenderable, items: RepoItem[]): void 
   }))
 }
 
-export type RepoSelectorWithSet = BoxRenderable & { setRepos: (repos: Repository[]) => void }
+export type RepoSelectorWithSet = BoxRenderable & { 
+  setRepos: (repos: Repository[]) => void
+  handleKey: (key: { name: string }) => void
+}
