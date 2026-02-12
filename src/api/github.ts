@@ -1,29 +1,29 @@
 import type {
-  Organization,
-  Repository,
+  ApplyResult,
   Branch,
   BranchProtection,
   BranchProtectionInput,
-  ApplyResult,
+  Organization,
+  Repository,
 } from '../types'
 
 async function ghApi(
   endpoint: string,
   method: 'GET' | 'PUT' | 'DELETE' = 'GET',
-  body?: object
+  body?: object,
 ): Promise<unknown> {
   const args = ['api', endpoint]
-  
+
   if (method !== 'GET') {
     args.push('-X', method)
   }
-  
+
   if (body) {
     args.push('--input', '-')
   }
-  
+
   let proc: Bun.Subprocess
-  
+
   if (body) {
     proc = Bun.spawn(['gh', ...args], {
       stdout: 'pipe',
@@ -32,7 +32,10 @@ async function ghApi(
     })
     const bodyStr = JSON.stringify(body)
     const encoder = new TextEncoder()
-    const stdin = proc.stdin! as unknown as { write: (data: Uint8Array) => Promise<void>; close: () => void }
+    const stdin = proc.stdin! as unknown as {
+      write: (data: Uint8Array) => Promise<void>
+      close: () => void
+    }
     await stdin.write(encoder.encode(bodyStr))
     stdin.close()
   } else {
@@ -41,19 +44,19 @@ async function ghApi(
       stderr: 'pipe',
     })
   }
-  
+
   const stdout = await new Response(proc.stdout as ReadableStream).text()
   const stderr = await new Response(proc.stderr as ReadableStream).text()
   const exitCode = await proc.exited
-  
+
   if (exitCode !== 0) {
     throw new Error(stderr || `gh api failed with exit code ${exitCode}`)
   }
-  
+
   if (!stdout.trim()) {
     return null
   }
-  
+
   return JSON.parse(stdout)
 }
 
@@ -66,14 +69,23 @@ export async function getOrgRepos(org: string): Promise<Repository[]> {
 }
 
 export async function getUserRepos(): Promise<Repository[]> {
-  return (await ghApi('/user/repos?per_page=100&affiliation=owner')) as Repository[]
+  return (await ghApi(
+    '/user/repos?per_page=100&affiliation=owner',
+  )) as Repository[]
 }
 
-export async function getRepoBranches(owner: string, repo: string): Promise<Branch[]> {
-  return (await ghApi(`/repos/${owner}/${repo}/branches?per_page=100`)) as Branch[]
+export async function getRepoBranches(
+  owner: string,
+  repo: string,
+): Promise<Branch[]> {
+  return (await ghApi(
+    `/repos/${owner}/${repo}/branches?per_page=100`,
+  )) as Branch[]
 }
 
-function extractEnabled<T>(value: T | { enabled: boolean } | null | undefined): T | boolean | null {
+function extractEnabled<T>(
+  value: T | { enabled: boolean } | null | undefined,
+): T | boolean | null {
   if (value === null || value === undefined) return null
   if (typeof value === 'object' && value !== null && 'enabled' in value) {
     return (value as { enabled: boolean }).enabled
@@ -81,19 +93,29 @@ function extractEnabled<T>(value: T | { enabled: boolean } | null | undefined): 
   return value as T
 }
 
-function transformProtectionResponse(raw: Record<string, unknown>): BranchProtection {
+function transformProtectionResponse(
+  raw: Record<string, unknown>,
+): BranchProtection {
   return {
     url: raw.url as string | undefined,
-    required_pull_request_reviews: raw.required_pull_request_reviews as BranchProtection['required_pull_request_reviews'],
-    required_status_checks: raw.required_status_checks as BranchProtection['required_status_checks'],
+    required_pull_request_reviews:
+      raw.required_pull_request_reviews as BranchProtection['required_pull_request_reviews'],
+    required_status_checks:
+      raw.required_status_checks as BranchProtection['required_status_checks'],
     enforce_admins: extractEnabled(raw.enforce_admins) as boolean,
-    required_linear_history: extractEnabled(raw.required_linear_history) as boolean,
+    required_linear_history: extractEnabled(
+      raw.required_linear_history,
+    ) as boolean,
     allow_force_pushes: extractEnabled(raw.allow_force_pushes) as boolean,
     allow_deletions: extractEnabled(raw.allow_deletions) as boolean,
     block_creations: extractEnabled(raw.block_creations) as boolean,
-    required_conversation_resolution: extractEnabled(raw.required_conversation_resolution) as boolean,
+    required_conversation_resolution: extractEnabled(
+      raw.required_conversation_resolution,
+    ) as boolean,
     restrictions: raw.restrictions as BranchProtection['restrictions'],
-    required_signatures: raw.required_signatures ? { enabled: extractEnabled(raw.required_signatures) as boolean } : null,
+    required_signatures: raw.required_signatures
+      ? { enabled: extractEnabled(raw.required_signatures) as boolean }
+      : null,
     lock_branch: extractEnabled(raw.lock_branch) as boolean | undefined,
   }
 }
@@ -101,11 +123,11 @@ function transformProtectionResponse(raw: Record<string, unknown>): BranchProtec
 export async function getBranchProtection(
   owner: string,
   repo: string,
-  branch: string
+  branch: string,
 ): Promise<BranchProtection | null> {
   try {
     const raw = await ghApi(
-      `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`
+      `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
     )
     return transformProtectionResponse(raw as Record<string, unknown>)
   } catch (error) {
@@ -121,47 +143,54 @@ export async function updateBranchProtection(
   owner: string,
   repo: string,
   branch: string,
-  protection: BranchProtectionInput
+  protection: BranchProtectionInput,
 ): Promise<BranchProtection> {
   const cleanInput: Record<string, unknown> = {
-    required_pull_request_reviews: protection.required_pull_request_reviews ?? null,
+    required_pull_request_reviews:
+      protection.required_pull_request_reviews ?? null,
     required_status_checks: protection.required_status_checks ?? null,
     enforce_admins: protection.enforce_admins ?? false,
     required_linear_history: protection.required_linear_history ?? false,
     allow_force_pushes: protection.allow_force_pushes ?? false,
     allow_deletions: protection.allow_deletions ?? false,
     block_creations: protection.block_creations ?? false,
-    required_conversation_resolution: protection.required_conversation_resolution ?? true,
+    required_conversation_resolution:
+      protection.required_conversation_resolution ?? true,
     restrictions: protection.restrictions ?? null,
   }
-  
+
   return (await ghApi(
     `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
     'PUT',
-    cleanInput
+    cleanInput,
   )) as BranchProtection
 }
 
 export async function deleteBranchProtection(
   owner: string,
   repo: string,
-  branch: string
+  branch: string,
 ): Promise<void> {
   await ghApi(
     `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
-    'DELETE'
+    'DELETE',
   )
 }
 
 export async function applyProtectionToMultiple(
   targets: { owner: string; repo: string; branch: string }[],
-  protection: BranchProtectionInput
+  protection: BranchProtectionInput,
 ): Promise<ApplyResult[]> {
   const results: ApplyResult[] = []
-  
+
   for (const target of targets) {
     try {
-      await updateBranchProtection(target.owner, target.repo, target.branch, protection)
+      await updateBranchProtection(
+        target.owner,
+        target.repo,
+        target.branch,
+        protection,
+      )
       results.push({
         repo: {
           name: target.repo,
@@ -184,24 +213,27 @@ export async function applyProtectionToMultiple(
       })
     }
   }
-  
+
   return results
 }
 
-export async function detectLocalRepo(): Promise<{ owner: string; repo: string } | null> {
+export async function detectLocalRepo(): Promise<{
+  owner: string
+  repo: string
+} | null> {
   try {
     const proc = Bun.spawn(['gh', 'repo', 'view', '--json', 'owner,name'], {
       stdout: 'pipe',
       stderr: 'pipe',
     })
-    
+
     const stdout = await new Response(proc.stdout as ReadableStream).text()
     const exitCode = await proc.exited
-    
+
     if (exitCode !== 0 || !stdout.trim()) {
       return null
     }
-    
+
     const data = JSON.parse(stdout)
     return { owner: data.owner.login, repo: data.name }
   } catch {
@@ -216,9 +248,14 @@ export interface Workflow {
   state: string
 }
 
-export async function getRepoWorkflows(owner: string, repo: string): Promise<Workflow[]> {
+export async function getRepoWorkflows(
+  owner: string,
+  repo: string,
+): Promise<Workflow[]> {
   try {
-    const result = await ghApi(`/repos/${owner}/${repo}/actions/workflows?per_page=100`)
+    const result = await ghApi(
+      `/repos/${owner}/${repo}/actions/workflows?per_page=100`,
+    )
     const data = result as { workflows: Workflow[] } | null
     return data?.workflows ?? []
   } catch {

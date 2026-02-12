@@ -18,14 +18,24 @@ bun run index.ts --local
 # or
 bun run start:local
 
-# Type checking (no dedicated script - use tsc directly)
+# Type checking
+bun run typecheck
+# or
 bunx tsc --noEmit
 
-# Run tests (no tests configured yet, use bun test when adding)
+# Run tests
+bun run test
+# or
 bun test
 
 # Run a single test file
-bun test path/to/test.test.ts
+bun test src/utils/templates.test.ts
+
+# Lint and format check
+bunx biome check .
+
+# Auto-fix lint/format issues
+bunx biome check --write .
 ```
 
 ## Runtime & Environment
