@@ -22,19 +22,28 @@ async function ghApi(
     args.push('--input', '-')
   }
   
-  const proc = Bun.spawn(['gh', ...args], {
-    stdout: 'pipe',
-    stdin: body ? 'pipe' : undefined,
-    stderr: 'pipe',
-  })
+  let proc: Bun.Subprocess
   
   if (body) {
-    proc.stdin!.write(JSON.stringify(body))
-    proc.stdin!.end()
+    proc = Bun.spawn(['gh', ...args], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'pipe',
+    })
+    const bodyStr = JSON.stringify(body)
+    const encoder = new TextEncoder()
+    const stdin = proc.stdin! as unknown as { write: (data: Uint8Array) => Promise<void>; close: () => void }
+    await stdin.write(encoder.encode(bodyStr))
+    stdin.close()
+  } else {
+    proc = Bun.spawn(['gh', ...args], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
   }
   
-  const stdout = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
+  const stdout = await new Response(proc.stdout as ReadableStream).text()
+  const stderr = await new Response(proc.stderr as ReadableStream).text()
   const exitCode = await proc.exited
   
   if (exitCode !== 0) {
@@ -148,7 +157,7 @@ export async function detectLocalRepo(): Promise<{ owner: string; repo: string }
       stderr: 'pipe',
     })
     
-    const stdout = await new Response(proc.stdout).text()
+    const stdout = await new Response(proc.stdout as ReadableStream).text()
     const exitCode = await proc.exited
     
     if (exitCode !== 0 || !stdout.trim()) {
