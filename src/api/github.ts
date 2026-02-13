@@ -145,10 +145,28 @@ export async function updateBranchProtection(
   branch: string,
   protection: BranchProtectionInput,
 ): Promise<BranchProtection> {
+  let cleanStatusChecks = null
+  if (protection.required_status_checks) {
+    const rsc = protection.required_status_checks
+    cleanStatusChecks = {
+      strict: rsc.strict ?? false,
+      contexts: rsc.contexts ?? [],
+    }
+  }
+
+  let cleanPrReviews = null
+  if (protection.required_pull_request_reviews) {
+    const rpr = protection.required_pull_request_reviews
+    cleanPrReviews = {
+      dismiss_stale_reviews: rpr.dismiss_stale_reviews ?? false,
+      require_code_owner_reviews: rpr.require_code_owner_reviews ?? false,
+      required_approving_review_count: rpr.required_approving_review_count ?? 1,
+    }
+  }
+
   const cleanInput: Record<string, unknown> = {
-    required_pull_request_reviews:
-      protection.required_pull_request_reviews ?? null,
-    required_status_checks: protection.required_status_checks ?? null,
+    required_pull_request_reviews: cleanPrReviews,
+    required_status_checks: cleanStatusChecks,
     enforce_admins: protection.enforce_admins ?? false,
     required_linear_history: protection.required_linear_history ?? false,
     allow_force_pushes: protection.allow_force_pushes ?? false,
