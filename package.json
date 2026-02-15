@@ -23,11 +23,11 @@
   ],
   "type": "module",
   "bin": {
-    "repoprotector": "./index.ts"
+    "repoprotector": "./cli.ts"
   },
-  "main": "./index.ts",
+  "main": "./cli.ts",
   "files": [
-    "index.ts",
+    "cli.ts",
     "src/",
     "README.md",
     "LICENSE",
